@@ -12,6 +12,9 @@ A polished, runnable Next.js demonstration of an India-focused B2B oil raw-mater
 - Seller listing-management preview with review state separation
 - Financial reporting view that distinguishes GMV, 1% commission and seller proceeds
 - Business-verification checklist with intentional document-access messaging
+- PostgreSQL/Prisma production data model for companies, memberships, documents, catalogues, RFQs, quotations, orders, payments, commission ledger, settlements, notifications and audit logs
+- Server health endpoint plus a server-side commission-preview endpoint (`POST /api/commission/preview`)
+- Unit tests for paise rounding, refund reversal, state-machine guards and commission idempotency keys
 
 ## Run locally
 
@@ -24,7 +27,11 @@ Open the URL shown by Next.js (typically `http://localhost:3000`). For productio
 
 ```bash
 npm run build
+npm test
+npm run prisma:validate
 ```
+
+For a local PostgreSQL instance, copy `.env.example` to `.env` and run `docker compose up -d`. Then use Prisma migration commands once the `prisma` development dependency has been installed.
 
 ## Production architecture next steps
 

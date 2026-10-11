@@ -1,0 +1,262 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role { BUYER SELLER ADMIN FINANCE_OPS }
+enum CompanyType { BUYER SELLER BOTH }
+enum VerificationStatus { PENDING VERIFIED INFO_REQUIRED REJECTED }
+enum PriceVisibility { PUBLIC ON_REQUEST }
+enum PurchaseMode { FIXED_PRICE RFQ_ONLY BOTH }
+enum RfqStatus { DRAFT OPEN CLOSED AWARDED CANCELLED }
+enum QuoteStatus { DRAFT SENT REVISED ACCEPTED REJECTED EXPIRED WITHDRAWN }
+enum OrderStatus { DRAFT QUOTATION_ACCEPTED CONFIRMED PAYMENT_PENDING PAYMENT_CONFIRMED PROCESSING SHIPPED DELIVERED COMPLETED CANCELLED REFUNDED DISPUTED FAILED }
+enum PaymentStatus { PENDING AUTHORIZED CAPTURED FAILED PARTIALLY_REFUNDED REFUNDED }
+enum CommissionStatus { PENDING EARNED REVERSED SETTLED }
+enum LedgerKind { COMMISSION_ACCRUAL COMMISSION_REVERSAL SETTLEMENT REFUND_ADJUSTMENT }
+enum AuditAction { CREATE UPDATE DELETE APPROVE REJECT STATE_TRANSITION PAYMENT_WEBHOOK }
+
+model User {
+  id            String              @id @default(cuid())
+  email         String              @unique
+  passwordHash  String?
+  fullName      String
+  role          Role
+  memberships   CompanyMembership[]
+  notifications Notification[]
+  auditLogs     AuditLog[]          @relation("ActorAuditLogs")
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+}
+
+model Company {
+  id                 String              @id @default(cuid())
+  legalName          String
+  companyType        CompanyType
+  gstin              String?             @unique
+  pan                String?
+  city               String?
+  state              String?
+  verificationStatus VerificationStatus   @default(PENDING)
+  memberships        CompanyMembership[]
+  documents          VerificationDocument[]
+  products           Product[]
+  buyerRfqs          Rfq[]               @relation("BuyerRfqs")
+  buyerOrders        Order[]             @relation("BuyerOrders")
+  sellerOrders       Order[]             @relation("SellerOrders")
+  settlements        Settlement[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model CompanyMembership {
+  userId    String
+  companyId String
+  role      Role
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company   Company @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  @@id([userId, companyId])
+  @@index([companyId, role])
+}
+
+model VerificationDocument {
+  id        String             @id @default(cuid())
+  companyId String
+  kind      String
+  storageKey String             @unique
+  status    VerificationStatus @default(PENDING)
+  company   Company             @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  createdAt DateTime           @default(now())
+  // Private object-storage keys only; never store a public document URL here.
+  @@index([companyId, status])
+}
+
+model Category {
+  id       String    @id @default(cuid())
+  slug     String    @unique
+  name     String
+  products Product[]
+}
+
+model Product {
+  id              String          @id @default(cuid())
+  sellerCompanyId String
+  categoryId      String
+  name            String
+  description     String
+  grade           String?
+  origin          String?
+  packageType     String?
+  pricePaise      Int?
+  priceUnit       String?
+  minimumOrderQty Decimal         @db.Decimal(14, 3)
+  availableQty    Decimal?        @db.Decimal(14, 3)
+  priceVisibility PriceVisibility @default(PUBLIC)
+  purchaseMode    PurchaseMode    @default(BOTH)
+  isApproved      Boolean         @default(false)
+  seller          Company         @relation(fields: [sellerCompanyId], references: [id])
+  category        Category        @relation(fields: [categoryId], references: [id])
+  orderItems      OrderItem[]
+  quotations      Quotation[]
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  @@index([categoryId, isApproved])
+  @@index([sellerCompanyId, isApproved])
+}
+
+model Rfq {
+  id                String    @id @default(cuid())
+  buyerCompanyId    String
+  materialName      String
+  categoryId        String?
+  quantity          Decimal   @db.Decimal(14, 3)
+  unit              String
+  specifications    String?
+  targetPricePaise  Int?
+  deliveryLocation  String
+  requiredBy        DateTime?
+  status            RfqStatus @default(DRAFT)
+  buyer             Company   @relation("BuyerRfqs", fields: [buyerCompanyId], references: [id])
+  quotations        Quotation[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  @@index([buyerCompanyId, status])
+  @@index([status, requiredBy])
+}
+
+model Quotation {
+  id              String      @id @default(cuid())
+  rfqId           String
+  sellerCompanyId String
+  productId       String?
+  pricePaise      Int
+  quantity        Decimal     @db.Decimal(14, 3)
+  deliveryPaise   Int         @default(0)
+  leadTimeDays    Int?
+  paymentTerms    String?
+  validUntil      DateTime
+  status          QuoteStatus @default(DRAFT)
+  revision        Int         @default(1)
+  rfq             Rfq         @relation(fields: [rfqId], references: [id])
+  seller          Company     @relation(fields: [sellerCompanyId], references: [id])
+  product         Product?    @relation(fields: [productId], references: [id])
+  order           Order?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  @@index([rfqId, status])
+  @@index([sellerCompanyId, status])
+}
+
+model Order {
+  id                     String          @id @default(cuid())
+  publicId               String          @unique
+  buyerCompanyId         String
+  sellerCompanyId        String
+  quotationId            String?         @unique
+  status                 OrderStatus     @default(DRAFT)
+  paymentStatus          PaymentStatus   @default(PENDING)
+  productSubtotalPaise   Int
+  deliveryChargePaise    Int             @default(0)
+  taxPaise               Int             @default(0)
+  totalPayablePaise      Int
+  commissionRateBps      Int
+  commissionBasis        String
+  commissionPaise        Int
+  buyer                  Company         @relation("BuyerOrders", fields: [buyerCompanyId], references: [id])
+  seller                 Company         @relation("SellerOrders", fields: [sellerCompanyId], references: [id])
+  quotation              Quotation?      @relation(fields: [quotationId], references: [id])
+  items                  OrderItem[]
+  payments               Payment[]
+  commissionEntries      CommissionLedger[]
+  refunds                Refund[]
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  @@index([buyerCompanyId, status])
+  @@index([sellerCompanyId, status])
+  @@index([status, paymentStatus])
+}
+
+model OrderItem {
+  id            String  @id @default(cuid())
+  orderId       String
+  productId     String
+  productName   String
+  quantity      Decimal @db.Decimal(14, 3)
+  unit          String
+  unitPricePaise Int
+  subtotalPaise Int
+  order         Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product @relation(fields: [productId], references: [id])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  orderId           String
+  provider          String
+  providerPaymentId String        @unique
+  status            PaymentStatus @default(PENDING)
+  amountPaise       Int
+  webhookEventId    String?       @unique
+  order             Order         @relation(fields: [orderId], references: [id])
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model Refund {
+  id          String   @id @default(cuid())
+  orderId     String
+  amountPaise Int
+  reason      String?
+  providerRefundId String? @unique
+  order       Order    @relation(fields: [orderId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+model CommissionLedger {
+  id          String           @id @default(cuid())
+  orderId     String
+  kind        LedgerKind
+  status      CommissionStatus @default(PENDING)
+  amountPaise Int
+  idempotencyKey String         @unique
+  order       Order             @relation(fields: [orderId], references: [id])
+  createdAt   DateTime         @default(now())
+  @@index([orderId, status])
+}
+
+model Settlement {
+  id              String   @id @default(cuid())
+  sellerCompanyId String
+  amountPaise     Int
+  providerPayoutId String? @unique
+  status          String
+  seller          Company  @relation(fields: [sellerCompanyId], references: [id])
+  createdAt       DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  kind      String
+  body      String
+  readAt    DateTime?
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String      @id @default(cuid())
+  actorId   String?
+  action    AuditAction
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  actor     User?       @relation("ActorAuditLogs", fields: [actorId], references: [id])
+  createdAt DateTime    @default(now())
+  @@index([entity, entityId])
+}
