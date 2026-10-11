@@ -6,6 +6,7 @@ A polished, runnable Next.js demonstration of an India-focused B2B oil raw-mater
 
 - Responsive buyer procurement workspace with seeded industrial oil and meal listings
 - Clickable buyer/seller workspace switcher with seller dashboard, seller-specific navigation and browser-persisted demo selection
+- Create demo buyer, seller, or buyer-and-seller company workspaces from the workspace menu; listings created in a seller workspace immediately appear in buyer discovery for the current session
 - Product discovery, search, category and supplier-verification filtering
 - Product details with MOQ, indicative pricing and quotation/order intent paths
 - Three-step RFQ draft flow, private RFQ positioning and quotation summary table
