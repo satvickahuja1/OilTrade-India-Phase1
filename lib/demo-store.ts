@@ -1,4 +1,5 @@
-import { assertOrderTransition, createCommissionEntry } from "./commerce";
+import { assertOrderTransition, calculateCommission, createCommissionEntry } from "./commerce";
+import { demoCatalog } from "./demo-catalog";
 
 export type DemoRfq = {
   id: string;
@@ -19,6 +20,17 @@ export type DemoOrder = {
   buyerCompanyId: string;
   sellerCompanyId: string;
   status: string;
+  paymentStatus: "PENDING" | "CAPTURED";
+  productSubtotalPaise: number;
+  deliveryChargePaise: number;
+  taxPaise: number;
+  totalPayablePaise: number;
+  commissionRateBps: number;
+  commissionBasis: string;
+  commissionPaise: number;
+  sellerProceedsPaise: number;
+  productName: string;
+  quantityKg: number;
   events: Array<{ from: string; to: string; at: string; actorId: string }>;
 };
 
@@ -28,7 +40,7 @@ const getStore = (): Store => {
   if (!globalStore.oiltradeDemoStore) {
     globalStore.oiltradeDemoStore = {
       rfqs: [], idempotency: new Set(), ledger: [],
-      orders: new Map([["OT-2026-0418", { publicId: "OT-2026-0418", buyerCompanyId: "demo-buyer-company", sellerCompanyId: "demo-seller-company", status: "PAYMENT_CONFIRMED", events: [] }]])
+      orders: new Map([["OT-2026-0418", { publicId: "OT-2026-0418", buyerCompanyId: "demo-buyer-company", sellerCompanyId: "demo-seller-company", status: "PAYMENT_CONFIRMED", paymentStatus: "CAPTURED", productSubtotalPaise: 64_250_000, deliveryChargePaise: 0, taxPaise: 0, totalPayablePaise: 64_250_000, commissionRateBps: 100, commissionBasis: "PRODUCT_VALUE", commissionPaise: 642_500, sellerProceedsPaise: 63_607_500, productName: "Refined Sunflower Oil", quantityKg: 5000, events: [] }]])
     };
   }
   return globalStore.oiltradeDemoStore;
@@ -41,6 +53,28 @@ export function createDemoRfq(input: Omit<DemoRfq, "id" | "status" | "createdAt"
 }
 
 export function listDemoRfqs(companyId: string) { return getStore().rfqs.filter((rfq) => rfq.buyerCompanyId === companyId); }
+
+export function createDemoOrder(input: { buyerCompanyId: string; productId: number; quantityKg: number; idempotencyKey: string }) {
+  const store = getStore();
+  const product = demoCatalog.get(input.productId);
+  if (!product) throw new Error("PRODUCT_NOT_FOUND");
+  if (!Number.isSafeInteger(input.quantityKg) || input.quantityKg < product.minimumOrderKg) throw new Error(`Minimum order is ${product.minimumOrderKg} kg`);
+  const existing = [...store.orders.values()].find((order) => (order as DemoOrder & { idempotencyKey?: string }).idempotencyKey === input.idempotencyKey);
+  if (existing) return existing;
+  const productSubtotalPaise = product.pricePaisePerKg * input.quantityKg;
+  const commission = calculateCommission({ productSubtotalPaise });
+  const number = String(store.orders.size + 419).padStart(4, "0");
+  const order = { publicId: `OT-2026-${number}`, buyerCompanyId: input.buyerCompanyId, sellerCompanyId: product.sellerCompanyId, status: "PAYMENT_PENDING", paymentStatus: "PENDING" as const, productSubtotalPaise, deliveryChargePaise: 0, taxPaise: 0, totalPayablePaise: productSubtotalPaise, commissionRateBps: commission.rateBps, commissionBasis: commission.basis, commissionPaise: commission.commissionPaise, sellerProceedsPaise: commission.sellerProceedsPaise, productName: product.name, quantityKg: input.quantityKg, idempotencyKey: input.idempotencyKey, events: [{ from: "DRAFT", to: "PAYMENT_PENDING", at: new Date().toISOString(), actorId: "system" }] };
+  store.orders.set(order.publicId, order);
+  return order;
+}
+
+export function getDemoOrder(publicId: string, companyId: string) {
+  const order = getStore().orders.get(publicId);
+  if (!order) throw new Error("ORDER_NOT_FOUND");
+  if (![order.buyerCompanyId, order.sellerCompanyId].includes(companyId)) throw new Error("FORBIDDEN_ORDER_ACCESS");
+  return order;
+}
 
 export function transitionDemoOrder(input: { publicId: string; actorId: string; actorCompanyId: string; to: string; eventId: string }) {
   const store = getStore();

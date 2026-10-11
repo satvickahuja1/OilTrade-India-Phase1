@@ -5,6 +5,7 @@ A polished, runnable Next.js demonstration of an India-focused B2B oil raw-mater
 ## Included workflows
 
 - Responsive buyer procurement workspace with seeded industrial oil and meal listings
+- Clickable buyer/seller workspace switcher with seller dashboard, seller-specific navigation and browser-persisted demo selection
 - Product discovery, search, category and supplier-verification filtering
 - Product details with MOQ, indicative pricing and quotation/order intent paths
 - Three-step RFQ draft flow, private RFQ positioning and quotation summary table
@@ -15,6 +16,7 @@ A polished, runnable Next.js demonstration of an India-focused B2B oil raw-mater
 - PostgreSQL/Prisma production data model for companies, memberships, documents, catalogues, RFQs, quotations, orders, payments, commission ledger, settlements, notifications and audit logs
 - Server health endpoint plus a server-side commission-preview endpoint (`POST /api/commission/preview`)
 - Demo-mode RFQ API with server-side validation, plus an order-transition API that enforces lifecycle rules and company ownership
+- Server-created fixed-price demo checkout: browser prices are ignored, MOQ is validated against the server catalogue, and each payment-pending order stores an immutable commission-rate/basis snapshot
 - Unit tests for paise rounding, refund reversal, state-machine guards and commission idempotency keys
 
 ## Run locally
