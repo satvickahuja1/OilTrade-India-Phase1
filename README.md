@@ -14,6 +14,7 @@ A polished, runnable Next.js demonstration of an India-focused B2B oil raw-mater
 - Business-verification checklist with intentional document-access messaging
 - PostgreSQL/Prisma production data model for companies, memberships, documents, catalogues, RFQs, quotations, orders, payments, commission ledger, settlements, notifications and audit logs
 - Server health endpoint plus a server-side commission-preview endpoint (`POST /api/commission/preview`)
+- Demo-mode RFQ API with server-side validation, plus an order-transition API that enforces lifecycle rules and company ownership
 - Unit tests for paise rounding, refund reversal, state-machine guards and commission idempotency keys
 
 ## Run locally
@@ -32,6 +33,10 @@ npm run prisma:validate
 ```
 
 For a local PostgreSQL instance, copy `.env.example` to `.env` and run `docker compose up -d`. Then use Prisma migration commands once the `prisma` development dependency has been installed.
+
+## Demo API behavior
+
+`POST /api/rfqs` is live in demo mode and is used by the RFQ modal. Demo data is process-local and intentionally ephemeral. The `x-oiltrade-demo-role` header is accepted only while demo mode is enabled; setting `NEXT_PUBLIC_DEMO_MODE=false` makes these routes fail closed until a real server-side authentication provider is connected.
 
 ## Production architecture next steps
 
